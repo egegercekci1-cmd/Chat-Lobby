@@ -2,13 +2,14 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<title>EgeChat</title>
+<title>Ege Chat</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
 body{
+  margin:0;
   background:#121212;
   color:white;
   font-family:Arial;
@@ -19,11 +20,21 @@ body{
 }
 .chat{
   width:360px;
+  height:600px;
   background:#1e1e1e;
-  border-radius:10px;
+  border-radius:12px;
   padding:10px;
   display:flex;
   flex-direction:column;
+}
+h3{
+  margin:5px 0;
+  text-align:center;
+}
+.status{
+  font-size:12px;
+  color:#aaa;
+  white-space:pre-line;
 }
 .messages{
   flex:1;
@@ -32,31 +43,42 @@ body{
 }
 .msg{
   background:#333;
-  padding:6px;
-  border-radius:6px;
+  padding:6px 8px;
+  border-radius:8px;
   margin:4px 0;
-}
-input,button{
-  padding:8px;
-  border:none;
-  border-radius:5px;
-}
-button{
-  background:#4caf50;
-  color:white;
+  font-size:14px;
 }
 .send{
   display:flex;
   gap:5px;
 }
+input,button{
+  padding:8px;
+  border:none;
+  border-radius:6px;
+}
+input{
+  flex:1;
+}
+button{
+  background:#4caf50;
+  color:white;
+}
 </style>
 </head>
 <body>
 
+<audio id="notifySound" src="https://notificationsounds.com/storage/sounds/file-sounds-1150-pristine.mp3"></audio>
+
 <div class="chat">
-  <h3>💬 EgeChat</h3>
+  <h3>💬 Ege Chat</h3>
+
+  <div class="status" id="onlineStatus"></div>
+  <div class="status" id="typingStatus"></div>
+
   <input id="username" placeholder="Kullanıcı adın">
   <div class="messages" id="messages"></div>
+
   <div class="send">
     <input id="message" placeholder="Mesaj yaz">
     <button onclick="sendMessage()">Gönder</button>
@@ -64,43 +86,119 @@ button{
 </div>
 
 <script>
-  // 🔥 SENİN FIREBASE CONFIG
-  const firebaseConfig = {
-    apiKey: "AIzaSyCDJ3x--j0YFqOZxz1Wj-o5_QLn9KgJlnk",
-    authDomain: "chat-lobby-fa938.firebaseapp.com",
-    databaseURL: "https://chat-lobby-fa938-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "chat-lobby-fa938",
-    storageBucket: "chat-lobby-fa938.firebasestorage.app",
-    messagingSenderId: "436067349066",
-    appId: "1:436067349066:web:65f19c754697b6f84d6cb3"
-  };
+/* 🔥 FIREBASE CONFIG */
+const firebaseConfig = {
+  apiKey: "AIzaSyCDJ3x--j0YFqOZxz1Wj-o5_QLn9KgJlnk",
+  authDomain: "chat-lobby-fa938.firebaseapp.com",
+  databaseURL: "https://chat-lobby-fa938-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "chat-lobby-fa938",
+  storageBucket: "chat-lobby-fa938.firebasestorage.app",
+  messagingSenderId: "436067349066",
+  appId: "1:436067349066:web:65f19c754697b6f84d6cb3"
+};
 
-  // Firebase başlat
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-  function sendMessage(){
-    const user = username.value;
-    const text = message.value;
-    if(!user || !text) return;
+const userInput = document.getElementById("username");
+const msgInput = document.getElementById("message");
+const messages = document.getElementById("messages");
+const onlineStatus = document.getElementById("onlineStatus");
+const typingStatus = document.getElementById("typingStatus");
+const sound = document.getElementById("notifySound");
 
-    db.ref("messages").push({
-      user,
-      text,
-      time: Date.now()
-    });
+let username = "";
 
-    message.value = "";
+/* 👤 KULLANICI ADI */
+userInput.addEventListener("change", () => {
+  username = userInput.value.trim();
+  if(username) setOnline(true);
+});
+
+/* 🟢 ONLINE / 🔴 OFFLINE + SON GÖRÜLME */
+function setOnline(state){
+  if(!username) return;
+
+  const ref = db.ref("status/" + username);
+
+  if(state){
+    ref.set({ online:true, lastSeen:Date.now() });
+    ref.onDisconnect().set({ online:false, lastSeen:Date.now() });
+  } else {
+    ref.set({ online:false, lastSeen:Date.now() });
   }
+}
 
-  db.ref("messages").on("child_added", snapshot=>{
-    const d = snapshot.val();
-    const div = document.createElement("div");
-    div.className = "msg";
-    div.innerText = d.user + ": " + d.text;
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight; // Otomatik kaydırma
+/* ✍️ YAZIYOR */
+msgInput.addEventListener("input", () => {
+  if(!username) return;
+  db.ref("typing/" + username).set(true);
+
+  clearTimeout(window.typingTimer);
+  window.typingTimer = setTimeout(() => {
+    db.ref("typing/" + username).set(false);
+  }, 1000);
+});
+
+/* 📩 MESAJ GÖNDER */
+function sendMessage(){
+  if(!username || !msgInput.value.trim()) return;
+
+  db.ref("messages").push({
+    user: username,
+    text: msgInput.value,
+    time: Date.now()
   });
+
+  db.ref("typing/" + username).set(false);
+  msgInput.value = "";
+}
+
+/* 📥 MESAJLARI DİNLE + 🔔 SES */
+db.ref("messages").on("child_added", snap => {
+  const d = snap.val();
+  const div = document.createElement("div");
+  div.className = "msg";
+  div.innerText = d.user + ": " + d.text;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+
+  if(d.user !== username){
+    sound.play().catch(()=>{});
+  }
+});
+
+/* 👥 ONLINE + SON GÖRÜLME GÖSTER */
+db.ref("status").on("value", snap => {
+  let text = "";
+  snap.forEach(u => {
+    const d = u.val();
+    if(d.online){
+      text += "🟢 " + u.key + " online\n";
+    } else if(d.lastSeen){
+      text += "⚫ " + u.key + " son görülme: " + timeAgo(d.lastSeen) + "\n";
+    }
+  });
+  onlineStatus.innerText = text || "Kimse yok";
+});
+
+/* ✍️ YAZIYOR GÖSTER */
+db.ref("typing").on("value", snap => {
+  let arr = [];
+  snap.forEach(u => {
+    if(u.val() && u.key !== username) arr.push(u.key);
+  });
+  typingStatus.innerText = arr.length ? "✍️ " + arr.join(", ") + " yazıyor..." : "";
+});
+
+/* ⏱️ ZAMAN HESABI */
+function timeAgo(t){
+  const s = Math.floor((Date.now()-t)/1000);
+  if(s<60) return s+" sn önce";
+  if(s<3600) return Math.floor(s/60)+" dk önce";
+  if(s<86400) return Math.floor(s/3600)+" saat önce";
+  return Math.floor(s/86400)+" gün önce";
+}
 </script>
 
 </body>
