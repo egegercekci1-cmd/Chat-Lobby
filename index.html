@@ -24,6 +24,7 @@ input{flex:1}
 button{background:#4caf50;color:white}
 .room{text-align:center;font-size:13px;color:#ccc;margin:5px 0;cursor:pointer}
 .small{font-size:11px;color:#aaa}
+.admin{color:#4caf50;cursor:pointer;margin-left:6px}
 </style>
 </head>
 
@@ -110,7 +111,7 @@ function createGroup(){
   newGroupInput.value="";
 }
 
-/* 🔐 GRUP LİSTESİ (SADECE ÜYE OLDUKLARIN) */
+/* 🔐 GRUP LİSTESİ */
 db.ref("groups").on("value",snap=>{
   let html="<b>🔐 Gruplarım</b>";
   snap.forEach(g=>{
@@ -127,8 +128,40 @@ function openGroup(g){
   currentChat="group_"+g;
   roomName.innerText="🔐 "+g;
   messages.innerHTML="";
+  roomInfo.innerText="yükleniyor...";
   loadMessages();
   updateGroupOnline();
+  showAdminControls();
+}
+
+/* 👑 ADMIN KONTROLLERİ */
+function showAdminControls(){
+  db.ref("groups/"+currentGroup+"/owner").once("value",snap=>{
+    if(snap.val()===username){
+      roomInfo.innerHTML += 
+      ' | <span class="admin" onclick="addMember()">➕ Ekle</span>' +
+      ' <span class="admin" onclick="removeMember()">➖ Çıkar</span>';
+    }
+  });
+}
+
+/* ➕ KİŞİ EKLE */
+function addMember(){
+  const u=prompt("Eklenecek kullanıcı adı:");
+  if(!u) return;
+  db.ref("users/"+u).once("value",snap=>{
+    if(!snap.exists()) return alert("Kullanıcı yok");
+    db.ref("groups/"+currentGroup+"/members/"+u).set(true);
+    alert("✅ Eklendi");
+  });
+}
+
+/* ➖ KİŞİ ÇIKAR */
+function removeMember(){
+  const u=prompt("Çıkarılacak kullanıcı adı:");
+  if(!u || u===username) return;
+  db.ref("groups/"+currentGroup+"/members/"+u).remove();
+  alert("❌ Çıkarıldı");
 }
 
 /* 👥 GRUP ONLINE */
@@ -138,7 +171,7 @@ function updateGroupOnline(){
   ref.onDisconnect().remove();
 
   db.ref("groupOnline/"+currentGroup).on("value",snap=>{
-    roomInfo.innerText="👥 Online: "+snap.numChildren();
+    roomInfo.innerHTML="👥 Online: "+snap.numChildren();
   });
 }
 
@@ -153,11 +186,11 @@ db.ref("users").on("value",snap=>{
   usersDiv.innerHTML=html;
 });
 
-/* 🔒 ÖZEL MESAJ */
+/* 🔒 DM */
 function openPrivate(other){
   currentChat=["dm",username,other].sort().join("|");
   currentGroup=null;
-  roomName.innerText="🔒 "+other+" ile özel sohbet";
+  roomName.innerText="🔒 "+other;
   roomInfo.innerText="";
   messages.innerHTML="";
   loadMessages();
