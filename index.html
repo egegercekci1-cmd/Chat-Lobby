@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <title>Ege Chat</title>
 
+<!-- 📱 iOS FULLSCREEN -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ege Chat">
+
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
@@ -13,59 +19,32 @@ body{
   background:#121212;
   color:white;
   font-family:Arial;
+  height:100vh;
   display:flex;
   justify-content:center;
   align-items:center;
-  height:100vh;
 }
 .chat{
-  width:360px;
-  height:600px;
+  width:100%;
+  max-width:420px;
+  height:100vh;
   background:#1e1e1e;
-  border-radius:12px;
-  padding:10px;
   display:flex;
   flex-direction:column;
+  padding:10px;
 }
-h3{
-  margin:5px 0;
-  text-align:center;
-}
-.status{
-  font-size:12px;
-  color:#aaa;
-  white-space:pre-line;
-}
-.messages{
-  flex:1;
-  overflow-y:auto;
-  margin:10px 0;
-}
-.msg{
-  background:#333;
-  padding:6px 8px;
-  border-radius:8px;
-  margin:4px 0;
-  font-size:14px;
-}
-.send{
-  display:flex;
-  gap:5px;
-}
-input,button{
-  padding:8px;
-  border:none;
-  border-radius:6px;
-}
-input{
-  flex:1;
-}
-button{
-  background:#4caf50;
-  color:white;
-}
+h3{text-align:center;margin:5px 0}
+.status{font-size:12px;color:#aaa;white-space:pre-line}
+.messages{flex:1;overflow-y:auto;margin:10px 0}
+.msg{background:#333;padding:8px;border-radius:8px;margin:4px 0}
+.send{display:flex;gap:5px}
+input,button{padding:10px;border:none;border-radius:8px}
+input{flex:1}
+button{background:#4caf50;color:white}
+#username{margin-bottom:5px}
 </style>
 </head>
+
 <body>
 
 <audio id="notifySound" src="https://notificationsounds.com/storage/sounds/file-sounds-1150-pristine.mp3"></audio>
@@ -86,7 +65,7 @@ button{
 </div>
 
 <script>
-/* 🔥 FIREBASE CONFIG */
+/* 🔥 FIREBASE */
 const firebaseConfig = {
   apiKey: "AIzaSyCDJ3x--j0YFqOZxz1Wj-o5_QLn9KgJlnk",
   authDomain: "chat-lobby-fa938.firebaseapp.com",
@@ -96,10 +75,10 @@ const firebaseConfig = {
   messagingSenderId: "436067349066",
   appId: "1:436067349066:web:65f19c754697b6f84d6cb3"
 };
-
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+/* 🎯 ELEMENTLER */
 const userInput = document.getElementById("username");
 const msgInput = document.getElementById("message");
 const messages = document.getElementById("messages");
@@ -107,99 +86,95 @@ const onlineStatus = document.getElementById("onlineStatus");
 const typingStatus = document.getElementById("typingStatus");
 const sound = document.getElementById("notifySound");
 
-let username = "";
+let username = localStorage.getItem("egechat_username") || "";
 
-/* 👤 KULLANICI ADI */
+/* 👤 KULLANICI ADI OTOMATİK */
+if(username){
+  userInput.value = username;
+  userInput.style.display = "none";
+  setOnline(true);
+}
+
+/* 👤 İLK KEZ GİRİŞ */
 userInput.addEventListener("change", () => {
   username = userInput.value.trim();
-  if(username) setOnline(true);
+  if(!username) return;
+  localStorage.setItem("egechat_username", username);
+  userInput.style.display = "none";
+  setOnline(true);
 });
 
-/* 🟢 ONLINE / 🔴 OFFLINE + SON GÖRÜLME */
+/* 🟢 ONLINE + SON GÖRÜLME */
 function setOnline(state){
-  if(!username) return;
-
   const ref = db.ref("status/" + username);
-
-  if(state){
-    ref.set({ online:true, lastSeen:Date.now() });
-    ref.onDisconnect().set({ online:false, lastSeen:Date.now() });
-  } else {
-    ref.set({ online:false, lastSeen:Date.now() });
-  }
+  ref.set({ online:true, lastSeen:Date.now() });
+  ref.onDisconnect().set({ online:false, lastSeen:Date.now() });
 }
 
 /* ✍️ YAZIYOR */
 msgInput.addEventListener("input", () => {
   if(!username) return;
   db.ref("typing/" + username).set(true);
-
-  clearTimeout(window.typingTimer);
-  window.typingTimer = setTimeout(() => {
+  clearTimeout(window.t);
+  window.t = setTimeout(()=>{
     db.ref("typing/" + username).set(false);
-  }, 1000);
+  },1000);
 });
 
-/* 📩 MESAJ GÖNDER */
+/* 📩 MESAJ */
 function sendMessage(){
-  if(!username || !msgInput.value.trim()) return;
-
+  if(!msgInput.value.trim()) return;
   db.ref("messages").push({
-    user: username,
-    text: msgInput.value,
-    time: Date.now()
+    user:username,
+    text:msgInput.value,
+    time:Date.now()
   });
-
   db.ref("typing/" + username).set(false);
-  msgInput.value = "";
+  msgInput.value="";
 }
 
-/* 📥 MESAJLARI DİNLE + 🔔 SES */
-db.ref("messages").on("child_added", snap => {
-  const d = snap.val();
-  const div = document.createElement("div");
-  div.className = "msg";
-  div.innerText = d.user + ": " + d.text;
+/* 📥 MESAJ + 🔔 */
+db.ref("messages").on("child_added", snap=>{
+  const d=snap.val();
+  const div=document.createElement("div");
+  div.className="msg";
+  div.innerText=d.user+": "+d.text;
   messages.appendChild(div);
-  messages.scrollTop = messages.scrollHeight;
-
-  if(d.user !== username){
-    sound.play().catch(()=>{});
-  }
+  messages.scrollTop=messages.scrollHeight;
+  if(d.user!==username) sound.play().catch(()=>{});
 });
 
-/* 👥 ONLINE + SON GÖRÜLME GÖSTER */
-db.ref("status").on("value", snap => {
-  let text = "";
-  snap.forEach(u => {
-    const d = u.val();
-    if(d.online){
-      text += "🟢 " + u.key + " online\n";
-    } else if(d.lastSeen){
-      text += "⚫ " + u.key + " son görülme: " + timeAgo(d.lastSeen) + "\n";
-    }
+/* 👥 DURUM */
+db.ref("status").on("value", snap=>{
+  let txt="";
+  snap.forEach(u=>{
+    const d=u.val();
+    txt+=d.online
+      ? "🟢 "+u.key+" online\n"
+      : "⚫ "+u.key+" son: "+timeAgo(d.lastSeen)+"\n";
   });
-  onlineStatus.innerText = text || "Kimse yok";
+  onlineStatus.innerText=txt;
 });
 
 /* ✍️ YAZIYOR GÖSTER */
-db.ref("typing").on("value", snap => {
-  let arr = [];
-  snap.forEach(u => {
-    if(u.val() && u.key !== username) arr.push(u.key);
+db.ref("typing").on("value", snap=>{
+  let arr=[];
+  snap.forEach(u=>{
+    if(u.val() && u.key!==username) arr.push(u.key);
   });
-  typingStatus.innerText = arr.length ? "✍️ " + arr.join(", ") + " yazıyor..." : "";
+  typingStatus.innerText=arr.length
+    ? "✍️ "+arr.join(", ")+" yazıyor..."
+    : "";
 });
 
-/* ⏱️ ZAMAN HESABI */
+/* ⏱️ ZAMAN */
 function timeAgo(t){
-  const s = Math.floor((Date.now()-t)/1000);
-  if(s<60) return s+" sn önce";
-  if(s<3600) return Math.floor(s/60)+" dk önce";
-  if(s<86400) return Math.floor(s/3600)+" saat önce";
-  return Math.floor(s/86400)+" gün önce";
+  const s=Math.floor((Date.now()-t)/1000);
+  if(s<60) return s+" sn";
+  if(s<3600) return Math.floor(s/60)+" dk";
+  if(s<86400) return Math.floor(s/3600)+" sa";
+  return Math.floor(s/86400)+" g";
 }
 </script>
-
 </body>
 </html>
