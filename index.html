@@ -34,12 +34,11 @@ button{background:#4caf50;color:white}
 <input id="username" placeholder="Kullanıcı adın">
 
 <div class="section">
-  <input id="newRoom" placeholder="➕ Oda adı">
-  <input id="roomPass" placeholder="🔐 Şifre (opsiyonel)">
-  <button onclick="createRoom()">Oluştur</button>
+  <input id="newGroup" placeholder="➕ Grup adı">
+  <button onclick="createGroup()">Grup Oluştur</button>
 </div>
 
-<div class="section" id="rooms"><b>🏠 Odalar</b></div>
+<div class="section" id="groups"><b>🔐 Gruplarım</b></div>
 <div class="section" id="users"><b>👤 Kişiler</b></div>
 
 <div class="room" id="roomName">🌍 Genel Sohbet</div>
@@ -69,19 +68,18 @@ const db = firebase.database();
 
 /* ELEMENTLER */
 const userInput = document.getElementById("username");
-const roomsDiv = document.getElementById("rooms");
+const groupsDiv = document.getElementById("groups");
 const usersDiv = document.getElementById("users");
 const messages = document.getElementById("messages");
 const msgInput = document.getElementById("message");
 const roomName = document.getElementById("roomName");
 const roomInfo = document.getElementById("roomInfo");
-const newRoomInput = document.getElementById("newRoom");
-const roomPassInput = document.getElementById("roomPass");
+const newGroupInput = document.getElementById("newGroup");
 
 /* DURUM */
 let username = localStorage.getItem("egechat_username") || "";
 let currentChat = "public";
-let currentRoom = null;
+let currentGroup = null;
 let msgRef;
 
 /* GİRİŞ */
@@ -101,65 +99,50 @@ userInput.addEventListener("change",()=>{
   loadMessages();
 });
 
-/* 1️⃣ ŞİFRELİ + SAHİPLİ ODA OLUŞTUR */
-function createRoom(){
-  const room=newRoomInput.value.trim();
-  if(!room) return;
-
-  db.ref("rooms/"+room).set({
+/* 🔐 GRUP OLUŞTUR */
+function createGroup(){
+  const g=newGroupInput.value.trim();
+  if(!g) return;
+  db.ref("groups/"+g).set({
     owner: username,
-    password: roomPassInput.value || "",
-    created: Date.now()
+    members:{ [username]: true }
   });
-
-  newRoomInput.value="";
-  roomPassInput.value="";
+  newGroupInput.value="";
 }
 
-/* ODA LİSTESİ */
-db.ref("rooms").on("value",snap=>{
-  let html="<b>🏠 Odalar</b>";
-  snap.forEach(r=>{
-    html+=`<div class="item" onclick="enterRoom('${r.key}')"># ${r.key}</div>`;
+/* 🔐 GRUP LİSTESİ (SADECE ÜYE OLDUKLARIN) */
+db.ref("groups").on("value",snap=>{
+  let html="<b>🔐 Gruplarım</b>";
+  snap.forEach(g=>{
+    if(g.val().members && g.val().members[username]){
+      html+=`<div class="item" onclick="openGroup('${g.key}')">🔒 ${g.key}</div>`;
+    }
   });
-  roomsDiv.innerHTML=html;
+  groupsDiv.innerHTML=html;
 });
 
-/* ODAYA GİR (ŞİFRE KONTROL) */
-function enterRoom(room){
-  db.ref("rooms/"+room).once("value",snap=>{
-    const data=snap.val();
-    if(data.password){
-      const p=prompt("Oda şifresi:");
-      if(p!==data.password) return alert("❌ Yanlış şifre");
-    }
-    openRoom(room,data.owner);
-  });
-}
-
-/* ODA AÇ */
-function openRoom(room,owner){
-  currentRoom=room;
-  currentChat="room_"+room;
-  roomName.innerText="🏠 "+room;
-  roomInfo.innerText="👑 Sahip: "+owner+" | 👥 Online: yükleniyor...";
+/* 🔐 GRUP AÇ */
+function openGroup(g){
+  currentGroup=g;
+  currentChat="group_"+g;
+  roomName.innerText="🔐 "+g;
   messages.innerHTML="";
   loadMessages();
-  updateOnlineCount();
+  updateGroupOnline();
 }
 
-/* 5️⃣ ONLINE SAYISI */
-function updateOnlineCount(){
-  const ref=db.ref("roomOnline/"+currentRoom+"/"+username);
+/* 👥 GRUP ONLINE */
+function updateGroupOnline(){
+  const ref=db.ref("groupOnline/"+currentGroup+"/"+username);
   ref.set(true);
   ref.onDisconnect().remove();
 
-  db.ref("roomOnline/"+currentRoom).on("value",snap=>{
-    roomInfo.innerText=roomInfo.innerText.split("|")[0]+" | 👥 Online: "+snap.numChildren();
+  db.ref("groupOnline/"+currentGroup).on("value",snap=>{
+    roomInfo.innerText="👥 Online: "+snap.numChildren();
   });
 }
 
-/* KİŞİLER */
+/* 👤 KİŞİLER */
 db.ref("users").on("value",snap=>{
   let html="<b>👤 Kişiler</b>";
   snap.forEach(u=>{
@@ -170,32 +153,32 @@ db.ref("users").on("value",snap=>{
   usersDiv.innerHTML=html;
 });
 
-/* ÖZEL SOHBET */
+/* 🔒 ÖZEL MESAJ */
 function openPrivate(other){
   currentChat=["dm",username,other].sort().join("|");
-  currentRoom=null;
+  currentGroup=null;
   roomName.innerText="🔒 "+other+" ile özel sohbet";
   roomInfo.innerText="";
   messages.innerHTML="";
   loadMessages();
 }
 
-/* GENEL */
+/* 🌍 GENEL */
 roomName.onclick=()=>{
   currentChat="public";
-  currentRoom=null;
+  currentGroup=null;
   roomName.innerText="🌍 Genel Sohbet";
   roomInfo.innerText="";
   messages.innerHTML="";
   loadMessages();
-}
+};
 
-/* MESAJLAR */
+/* 💬 MESAJLAR */
 function loadMessages(){
   if(msgRef) msgRef.off();
 
   let path="messages";
-  if(currentChat.startsWith("room_")) path="roomsMessages/"+currentChat;
+  if(currentChat.startsWith("group_")) path="groupMessages/"+currentGroup;
   if(currentChat.includes("|")) path="privateMessages/"+currentChat;
 
   msgRef=db.ref(path);
@@ -209,12 +192,12 @@ function loadMessages(){
   });
 }
 
-/* GÖNDER */
+/* 📤 GÖNDER */
 function sendMessage(){
   if(!msgInput.value.trim()) return;
 
   let path="messages";
-  if(currentChat.startsWith("room_")) path="roomsMessages/"+currentChat;
+  if(currentChat.startsWith("group_")) path="groupMessages/"+currentGroup;
   if(currentChat.includes("|")) path="privateMessages/"+currentChat;
 
   db.ref(path).push({
