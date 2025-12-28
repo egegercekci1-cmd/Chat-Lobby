@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>EgeChat</title>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<style>
+body{
+  background:#121212;
+  color:white;
+  font-family:Arial;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+}
+.chat{
+  width:360px;
+  background:#1e1e1e;
+  border-radius:10px;
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+}
+.messages{
+  flex:1;
+  overflow-y:auto;
+  margin:10px 0;
+}
+.msg{
+  background:#333;
+  padding:6px;
+  border-radius:6px;
+  margin:4px 0;
+}
+input,button{
+  padding:8px;
+  border:none;
+  border-radius:5px;
+}
+button{
+  background:#4caf50;
+  color:white;
+}
+.send{
+  display:flex;
+  gap:5px;
+}
+</style>
+</head>
+<body>
+
+<div class="chat">
+  <h3>💬 EgeChat</h3>
+  <input id="username" placeholder="Kullanıcı adın">
+  <div class="messages" id="messages"></div>
+  <div class="send">
+    <input id="message" placeholder="Mesaj yaz">
+    <button onclick="sendMessage()">Gönder</button>
+  </div>
+</div>
+
+<script>
+  // 🔥 SENİN FIREBASE CONFIG
+  const firebaseConfig = {
+    apiKey: "AIzaSyCDJ3x--j0YFqOZxz1Wj-o5_QLn9KgJlnk",
+    authDomain: "chat-lobby-fa938.firebaseapp.com",
+    databaseURL: "https://chat-lobby-fa938-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "chat-lobby-fa938",
+    storageBucket: "chat-lobby-fa938.firebasestorage.app",
+    messagingSenderId: "436067349066",
+    appId: "1:436067349066:web:65f19c754697b6f84d6cb3"
+  };
+
+  // Firebase başlat
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  function sendMessage(){
+    const user = username.value;
+    const text = message.value;
+    if(!user || !text) return;
+
+    db.ref("messages").push({
+      user,
+      text,
+      time: Date.now()
+    });
+
+    message.value = "";
+  }
+
+  db.ref("messages").on("child_added", snapshot=>{
+    const d = snapshot.val();
+    const div = document.createElement("div");
+    div.className = "msg";
+    div.innerText = d.user + ": " + d.text;
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight; // Otomatik kaydırma
+  });
+</script>
+
+</body>
+</html>
