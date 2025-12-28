@@ -22,7 +22,7 @@ h3{text-align:center;margin:5px 0}
 input,button{padding:10px;border:none;border-radius:8px}
 input{flex:1}
 button{background:#4caf50;color:white}
-.room{text-align:center;font-size:13px;color:#ccc;margin:5px 0;cursor:pointer}
+.room{text-align:center;font-size:13px;color:#ccc;margin:5px 0}
 .small{font-size:11px;color:#aaa}
 .admin{color:#4caf50;cursor:pointer;margin-left:6px}
 </style>
@@ -42,14 +42,14 @@ button{background:#4caf50;color:white}
 <div class="section" id="groups"><b>🔐 Gruplarım</b></div>
 <div class="section" id="users"><b>👤 Kişiler</b></div>
 
-<div class="room" id="roomName">🌍 Genel Sohbet</div>
-<div class="small" id="roomInfo"></div>
+<div class="room" id="roomName">📌 Lobi</div>
+<div class="small" id="roomInfo">Bir grup veya kişi seç</div>
 
 <div class="messages" id="messages"></div>
 
 <div class="send">
-  <input id="message" placeholder="Mesaj yaz">
-  <button onclick="sendMessage()">Gönder</button>
+  <input id="message" placeholder="Mesaj yaz" disabled>
+  <button onclick="sendMessage()" disabled>Gönder</button>
 </div>
 </div>
 
@@ -73,13 +73,14 @@ const groupsDiv = document.getElementById("groups");
 const usersDiv = document.getElementById("users");
 const messages = document.getElementById("messages");
 const msgInput = document.getElementById("message");
+const sendBtn = document.querySelector("button");
 const roomName = document.getElementById("roomName");
 const roomInfo = document.getElementById("roomInfo");
 const newGroupInput = document.getElementById("newGroup");
 
 /* DURUM */
 let username = localStorage.getItem("egechat_username") || "";
-let currentChat = "public";
+let currentChat = null;
 let currentGroup = null;
 let msgRef;
 
@@ -88,7 +89,6 @@ if(username){
   userInput.value=username;
   userInput.style.display="none";
   db.ref("users/"+username).set(true);
-  loadMessages();
 }
 
 userInput.addEventListener("change",()=>{
@@ -97,10 +97,9 @@ userInput.addEventListener("change",()=>{
   localStorage.setItem("egechat_username",username);
   userInput.style.display="none";
   db.ref("users/"+username).set(true);
-  loadMessages();
 });
 
-/* 🔐 GRUP OLUŞTUR */
+/* GRUP OLUŞTUR */
 function createGroup(){
   const g=newGroupInput.value.trim();
   if(!g) return;
@@ -111,7 +110,7 @@ function createGroup(){
   newGroupInput.value="";
 }
 
-/* 🔐 GRUP LİSTESİ */
+/* GRUP LİSTESİ */
 db.ref("groups").on("value",snap=>{
   let html="<b>🔐 Gruplarım</b>";
   snap.forEach(g=>{
@@ -122,19 +121,21 @@ db.ref("groups").on("value",snap=>{
   groupsDiv.innerHTML=html;
 });
 
-/* 🔐 GRUP AÇ */
+/* GRUP AÇ */
 function openGroup(g){
   currentGroup=g;
   currentChat="group_"+g;
   roomName.innerText="🔐 "+g;
+  roomInfo.innerText="";
   messages.innerHTML="";
-  roomInfo.innerText="yükleniyor...";
+  msgInput.disabled=false;
+  sendBtn.disabled=false;
   loadMessages();
   updateGroupOnline();
   showAdminControls();
 }
 
-/* 👑 ADMIN KONTROLLERİ */
+/* ADMIN */
 function showAdminControls(){
   db.ref("groups/"+currentGroup+"/owner").once("value",snap=>{
     if(snap.val()===username){
@@ -145,37 +146,30 @@ function showAdminControls(){
   });
 }
 
-/* ➕ KİŞİ EKLE */
 function addMember(){
-  const u=prompt("Eklenecek kullanıcı adı:");
+  const u=prompt("Eklenecek kullanıcı:");
   if(!u) return;
-  db.ref("users/"+u).once("value",snap=>{
-    if(!snap.exists()) return alert("Kullanıcı yok");
-    db.ref("groups/"+currentGroup+"/members/"+u).set(true);
-    alert("✅ Eklendi");
-  });
+  db.ref("groups/"+currentGroup+"/members/"+u).set(true);
 }
 
-/* ➖ KİŞİ ÇIKAR */
 function removeMember(){
-  const u=prompt("Çıkarılacak kullanıcı adı:");
+  const u=prompt("Çıkarılacak kullanıcı:");
   if(!u || u===username) return;
   db.ref("groups/"+currentGroup+"/members/"+u).remove();
-  alert("❌ Çıkarıldı");
 }
 
-/* 👥 GRUP ONLINE */
+/* GRUP ONLINE */
 function updateGroupOnline(){
   const ref=db.ref("groupOnline/"+currentGroup+"/"+username);
   ref.set(true);
   ref.onDisconnect().remove();
 
   db.ref("groupOnline/"+currentGroup).on("value",snap=>{
-    roomInfo.innerHTML="👥 Online: "+snap.numChildren();
+    roomInfo.innerHTML="👥 Online: "+snap.numChildren()+roomInfo.innerHTML.replace(/.*\|/,"");
   });
 }
 
-/* 👤 KİŞİLER */
+/* KİŞİLER (DM) */
 db.ref("users").on("value",snap=>{
   let html="<b>👤 Kişiler</b>";
   snap.forEach(u=>{
@@ -186,33 +180,25 @@ db.ref("users").on("value",snap=>{
   usersDiv.innerHTML=html;
 });
 
-/* 🔒 DM */
+/* DM */
 function openPrivate(other){
   currentChat=["dm",username,other].sort().join("|");
   currentGroup=null;
   roomName.innerText="🔒 "+other;
   roomInfo.innerText="";
   messages.innerHTML="";
+  msgInput.disabled=false;
+  sendBtn.disabled=false;
   loadMessages();
 }
 
-/* 🌍 GENEL */
-roomName.onclick=()=>{
-  currentChat="public";
-  currentGroup=null;
-  roomName.innerText="🌍 Genel Sohbet";
-  roomInfo.innerText="";
-  messages.innerHTML="";
-  loadMessages();
-};
-
-/* 💬 MESAJLAR */
+/* MESAJLAR */
 function loadMessages(){
   if(msgRef) msgRef.off();
 
-  let path="messages";
-  if(currentChat.startsWith("group_")) path="groupMessages/"+currentGroup;
-  if(currentChat.includes("|")) path="privateMessages/"+currentChat;
+  let path = currentChat.startsWith("group_")
+    ? "groupMessages/"+currentGroup
+    : "privateMessages/"+currentChat;
 
   msgRef=db.ref(path);
   msgRef.limitToLast(50).on("child_added",snap=>{
@@ -225,13 +211,13 @@ function loadMessages(){
   });
 }
 
-/* 📤 GÖNDER */
+/* GÖNDER */
 function sendMessage(){
-  if(!msgInput.value.trim()) return;
+  if(!msgInput.value.trim() || !currentChat) return;
 
-  let path="messages";
-  if(currentChat.startsWith("group_")) path="groupMessages/"+currentGroup;
-  if(currentChat.includes("|")) path="privateMessages/"+currentChat;
+  let path = currentChat.startsWith("group_")
+    ? "groupMessages/"+currentGroup
+    : "privateMessages/"+currentChat;
 
   db.ref(path).push({
     user:username,
