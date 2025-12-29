@@ -3,247 +3,166 @@
 <head>
 <meta charset="UTF-8">
 <title>Ege Chat</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
 body{margin:0;background:#121212;color:white;font-family:Arial}
 .chat{max-width:420px;height:100vh;margin:auto;background:#1e1e1e;display:flex;flex-direction:column;padding:10px}
-h3{text-align:center;margin:5px 0}
 .section{background:#2a2a2a;padding:6px;border-radius:6px;margin-bottom:6px;font-size:13px}
 .item{padding:6px;border-radius:5px;cursor:pointer}
 .item:hover{background:#3a3a3a}
-.group-item{display:flex;justify-content:space-between;align-items:center}
-.dots{padding:4px 8px;font-size:18px;color:#aaa;cursor:pointer}
-.dots:hover{color:white}
-.messages{flex:1;overflow-y:auto;margin:5px 0}
+.messages{flex:1;overflow-y:auto}
 .msg{background:#333;padding:8px;border-radius:8px;margin:4px 0}
-.send{display:flex;gap:5px}
-input,button{padding:10px;border:none;border-radius:8px}
-input{flex:1}
-button{background:#4caf50;color:white}
-.room{text-align:center;font-size:13px;color:#ccc;margin:5px 0}
-.small{font-size:11px;color:#aaa}
-.admin{color:#4caf50;cursor:pointer;margin-left:6px}
+.replyBox{font-size:11px;color:#aaa;border-left:3px solid #4caf50;padding-left:5px;margin-bottom:4px}
+.status{font-size:10px;color:#aaa;text-align:right}
+.typing{font-size:11px;color:#4caf50}
+.admin{color:#4caf50;cursor:pointer}
 </style>
 </head>
 
 <body>
 <div class="chat">
-<h3>💬 Ege Chat</h3>
+<h3 style="text-align:center">💬 Ege Chat</h3>
 
 <input id="username" placeholder="Kullanıcı adın">
 
 <div class="section">
-  <input id="newGroup" placeholder="➕ Grup adı">
-  <button onclick="createGroup()">Grup Oluştur</button>
+<input id="newGroup" placeholder="➕ Grup adı">
+<button onclick="createGroup()">Oluştur</button>
 </div>
 
-<div class="section" id="groups"><b>🔐 Gruplarım</b></div>
-<div class="section" id="users"><b>👤 Kişiler</b></div>
+<div class="section" id="groups"></div>
+<div class="section" id="users"></div>
 
-<div class="room" id="roomName">📌 Lobi</div>
-<div class="small" id="roomInfo">Bir grup veya kişi seç</div>
+<div id="roomName">📌 Lobi</div>
+<div id="roomInfo" class="typing"></div>
 
 <div class="messages" id="messages"></div>
 
-<div class="send">
-  <input id="message" placeholder="Mesaj yaz" disabled>
-  <button id="sendBtn" onclick="sendMessage()" disabled>Gönder</button>
+<div id="replyPreview"></div>
+
+<div style="display:flex">
+<input id="message" placeholder="Mesaj yaz" disabled>
+<button onclick="sendMessage()" id="sendBtn" disabled>Gönder</button>
 </div>
 </div>
 
 <script>
-/* FIREBASE */
 const firebaseConfig = {
-  apiKey: "AIzaSyCDJ3x--j0YFqOZxz1Wj-o5_QLn9KgJlnk",
-  authDomain: "chat-lobby-fa938.firebaseapp.com",
-  databaseURL: "https://chat-lobby-fa938-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "chat-lobby-fa938",
-  storageBucket: "chat-lobby-fa938.firebasestorage.app",
-  messagingSenderId: "436067349066",
-  appId: "1:436067349066:web:65f19c754697b6f84d6cb3"
+ apiKey:"AIzaSyCDJ3x--j0YFqOZxz1Wj-o5_QLn9KgJlnk",
+ databaseURL:"https://chat-lobby-fa938-default-rtdb.europe-west1.firebasedatabase.app"
 };
 firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+const db=firebase.database();
 
-/* ELEMENTLER */
-const userInput = document.getElementById("username");
-const groupsDiv = document.getElementById("groups");
-const usersDiv = document.getElementById("users");
-const messages = document.getElementById("messages");
-const msgInput = document.getElementById("message");
-const sendBtn = document.getElementById("sendBtn");
-const roomName = document.getElementById("roomName");
-const roomInfo = document.getElementById("roomInfo");
-const newGroupInput = document.getElementById("newGroup");
+let username=localStorage.getItem("user")||"";
+let currentChat=null,currentGroup=null,replyTo=null;
 
-/* DURUM */
-let username = localStorage.getItem("egechat_username") || "";
-let currentChat = null;
-let currentGroup = null;
-let msgRef = null;
-
-/* GİRİŞ */
+const userInput=document.getElementById("username");
 if(username){
-  userInput.value = username;
-  userInput.style.display = "none";
-  db.ref("users/"+username).set(true);
+ userInput.value=username;
+ userInput.style.display="none";
+ db.ref("users/"+username).set(true);
 }
+userInput.onchange=()=>{
+ username=userInput.value;
+ localStorage.setItem("user",username);
+ userInput.style.display="none";
+ db.ref("users/"+username).set(true);
+};
 
-userInput.addEventListener("change",()=>{
-  username = userInput.value.trim();
-  if(!username) return;
-  localStorage.setItem("egechat_username",username);
-  userInput.style.display="none";
-  db.ref("users/"+username).set(true);
-});
-
-/* GRUP OLUŞTUR */
 function createGroup(){
-  const g = newGroupInput.value.trim();
-  if(!g) return;
-  db.ref("groups/"+g).set({
-    owner: username,
-    members:{ [username]: true }
-  });
-  newGroupInput.value="";
+ const g=newGroup.value;
+ db.ref("groups/"+g).set({
+  owner:username,
+  desc:"",
+  members:{[username]:true}
+ });
 }
 
-/* GRUP LİSTESİ */
-db.ref("groups").on("value",snap=>{
-  let html="<b>🔐 Gruplarım</b>";
-  snap.forEach(g=>{
-    if(g.val().members && g.val().members[username]){
-      html += `
-      <div class="item group-item">
-        <span onclick="openGroup('${g.key}')">🔒 ${g.key}</span>
-        <span class="dots" onclick="event.stopPropagation();showGroupInfo('${g.key}')">⋮</span>
-      </div>`;
-    }
-  });
-  groupsDiv.innerHTML = html;
+db.ref("groups").on("value",s=>{
+ let h="<b>🔐 Gruplar</b>";
+ s.forEach(g=>{
+  if(g.val().members?.[username])
+   h+=`<div class="item" onclick="openGroup('${g.key}')">${g.key}</div>`;
+ });
+ groups.innerHTML=h;
 });
 
-/* GRUP AÇ */
 function openGroup(g){
-  currentGroup = g;
-  currentChat = "group_"+g;
-  roomName.innerText = "🔐 "+g;
-  roomInfo.innerText = "";
-  messages.innerHTML = "";
-  msgInput.disabled = false;
-  sendBtn.disabled = false;
-  loadMessages();
-  updateGroupOnline();
-  showAdminControls();
+ currentGroup=g;
+ currentChat="group_"+g;
+ loadMessages();
+ setupTyping();
 }
 
-/* ⋮ GRUP BİLGİ */
-function showGroupInfo(group){
-  db.ref("groups/"+group).once("value",snap=>{
-    const d = snap.val();
-    if(!d || !d.members) return;
-    const members = Object.keys(d.members);
-    let text = `👥 Üye Sayısı: ${members.length}\n\n`;
-    members.forEach(m=>{
-      text += m===d.owner ? `• ${m} (admin)\n` : `• ${m}\n`;
-    });
-    alert("🔐 "+group+"\n\n"+text);
-  });
-}
-
-/* ADMIN */
-function showAdminControls(){
-  db.ref("groups/"+currentGroup+"/owner").once("value",snap=>{
-    if(snap.val()===username){
-      roomInfo.innerHTML =
-        '👑 Admin | <span class="admin" onclick="addMember()">➕ Ekle</span>' +
-        ' <span class="admin" onclick="removeMember()">➖ Çıkar</span>';
-    }
-  });
-}
-
-function addMember(){
-  const u = prompt("Eklenecek kullanıcı:");
-  if(!u) return;
-  db.ref("groups/"+currentGroup+"/members/"+u).set(true);
-}
-
-function removeMember(){
-  const u = prompt("Çıkarılacak kullanıcı:");
-  if(!u || u===username) return;
-  db.ref("groups/"+currentGroup+"/members/"+u).remove();
-}
-
-/* GRUP ONLINE */
-function updateGroupOnline(){
-  const ref = db.ref("groupOnline/"+currentGroup+"/"+username);
-  ref.set(true);
-  ref.onDisconnect().remove();
-
-  db.ref("groupOnline/"+currentGroup).on("value",snap=>{
-    roomInfo.innerHTML = "👥 Online: "+snap.numChildren()+roomInfo.innerHTML.replace(/.*\|/,"");
-  });
-}
-
-/* KİŞİLER (DM) */
-db.ref("users").on("value",snap=>{
-  let html="<b>👤 Kişiler</b>";
-  snap.forEach(u=>{
-    if(u.key!==username){
-      html+=`<div class="item" onclick="openPrivate('${u.key}')">🔒 ${u.key}</div>`;
-    }
-  });
-  usersDiv.innerHTML=html;
+db.ref("users").on("value",s=>{
+ let h="<b>👤 Kişiler</b>";
+ s.forEach(u=>{
+  if(u.key!==username)
+   h+=`<div class="item" onclick="openDM('${u.key}')">${u.key}</div>`;
+ });
+ users.innerHTML=h;
 });
 
-/* DM */
-function openPrivate(other){
-  currentChat = ["dm",username,other].sort().join("|");
-  currentGroup = null;
-  roomName.innerText = "🔒 "+other;
-  roomInfo.innerText = "";
-  messages.innerHTML = "";
-  msgInput.disabled = false;
-  sendBtn.disabled = false;
-  loadMessages();
+function openDM(u){
+ currentChat=["dm",username,u].sort().join("|");
+ currentGroup=null;
+ loadMessages();
+ setupTyping();
 }
 
-/* MESAJLAR */
+function setupTyping(){
+ message.disabled=false;
+ sendBtn.disabled=false;
+ message.oninput=()=>{
+  db.ref("typing/"+currentChat+"/"+username).set(true);
+  setTimeout(()=>db.ref("typing/"+currentChat+"/"+username).remove(),1000);
+ };
+ db.ref("typing/"+currentChat).on("value",s=>{
+  let names=[];
+  s.forEach(x=>{if(x.key!==username)names.push(x.key)});
+  roomInfo.innerText=names.length?names.join(", ")+" yazıyor…":"";
+ });
+}
+
 function loadMessages(){
-  if(msgRef) msgRef.off();
-  let path = currentChat.startsWith("group_")
-    ? "groupMessages/"+currentGroup
-    : "privateMessages/"+currentChat;
-
-  msgRef = db.ref(path);
-  msgRef.limitToLast(50).on("child_added",snap=>{
-    const d = snap.val();
-    const div = document.createElement("div");
-    div.className="msg";
-    div.innerText = d.user+": "+d.text;
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight;
-  });
+ messages.innerHTML="";
+ let path=currentGroup?"groupMessages/"+currentGroup:"privateMessages/"+currentChat;
+ db.ref(path).off();
+ db.ref(path).on("child_added",s=>{
+  const d=s.val();
+  const div=document.createElement("div");
+  div.className="msg";
+  div.oncontextmenu=e=>{
+   e.preventDefault();
+   replyTo=d;
+   replyPreview.innerHTML=`Yanıtlanıyor: ${d.text}`;
+  };
+  if(d.reply)
+   div.innerHTML=`<div class="replyBox">${d.reply.user}: ${d.reply.text}</div>`;
+  div.innerHTML+=`${d.user}: ${d.text}`;
+  if(d.user===username)
+   div.innerHTML+=`<div class="status">${d.read?"✔✔":"✔"}</div>`;
+  messages.appendChild(div);
+  db.ref(path+"/"+s.key+"/read").set(true);
+ });
 }
 
-/* GÖNDER */
 function sendMessage(){
-  if(!msgInput.value.trim()) return;
-  let path = currentChat.startsWith("group_")
-    ? "groupMessages/"+currentGroup
-    : "privateMessages/"+currentChat;
-
-  db.ref(path).push({
-    user: username,
-    text: msgInput.value,
-    time: Date.now()
-  });
-  msgInput.value="";
+ let path=currentGroup?"groupMessages/"+currentGroup:"privateMessages/"+currentChat;
+ db.ref(path).push({
+  user:username,
+  text:message.value,
+  reply:replyTo?{user:replyTo.user,text:replyTo.text}:null,
+  read:false,
+  time:Date.now()
+ });
+ replyTo=null;
+ replyPreview.innerHTML="";
+ message.value="";
 }
 </script>
 </body>
