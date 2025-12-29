@@ -9,253 +9,312 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-body{margin:0;background:#121212;color:white;font-family:Arial}
-.chat{max-width:420px;height:100vh;margin:auto;background:#1e1e1e;display:flex;flex-direction:column;padding:10px}
-h3{text-align:center;margin:5px 0}
-.section{background:#2a2a2a;padding:6px;border-radius:6px;margin-bottom:6px;font-size:13px}
-.item{padding:6px;border-radius:5px;cursor:pointer}
-.item:hover{background:#3a3a3a}
-.small{font-size:11px;color:#aaa}
-.online{color:#4caf50;font-size:11px}
-.offline{color:#aaa;font-size:11px}
-.messages{flex:1;overflow-y:auto}
-.msg{background:#333;padding:8px;border-radius:8px;margin:4px 0}
-.replyBox{font-size:11px;color:#aaa;border-left:3px solid #4caf50;padding-left:5px;margin-bottom:4px}
-.status{font-size:10px;color:#aaa;text-align:right}
-.typing{font-size:11px;color:#4caf50}
-.group-item{display:flex;justify-content:space-between;align-items:center}
-.dots{padding:4px 8px;font-size:18px;color:#aaa;cursor:pointer}
-.dots:hover{color:white}
-.admin{color:#4caf50;cursor:pointer;margin-left:6px}
-.send{display:flex;gap:5px}
-input,button{padding:10px;border:none;border-radius:8px}
+/* ===== THEME ===== */
+:root{
+  --bg1:#0b1020;
+  --bg2:#1f3c88;
+  --card:rgba(30,30,30,0.75);
+  --accent:#4caf50;
+  --text:#fff;
+  --muted:#aaa;
+}
+
+/* ===== BACKGROUND ===== */
+body{
+  margin:0;
+  font-family:Arial;
+  color:var(--text);
+  background:
+    radial-gradient(circle at top, var(--bg2), var(--bg1) 60%),
+    linear-gradient(135deg,#121212,#1a1a1a);
+  min-height:100vh;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  background:radial-gradient(#ffffff08 1px,transparent 1px);
+  background-size:20px 20px;
+  pointer-events:none;
+}
+
+/* ===== APP ===== */
+.app{
+  max-width:420px;
+  height:100vh;
+  margin:auto;
+  display:flex;
+  flex-direction:column;
+  padding:8px;
+  backdrop-filter:blur(12px);
+}
+
+/* ===== UI ===== */
+h3{text-align:center;margin:6px 0}
+.card{
+  background:var(--card);
+  border-radius:10px;
+  padding:8px;
+  margin-bottom:6px;
+  border:1px solid rgba(255,255,255,0.08);
+}
+.row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.item{
+  padding:6px;
+  border-radius:6px;
+  cursor:pointer;
+}
+.item:hover{background:rgba(255,255,255,0.08)}
+.small{font-size:11px;color:var(--muted)}
+.online{color:var(--accent);font-size:11px}
+.offline{color:var(--muted);font-size:11px}
+
+/* ===== CHAT ===== */
+.messages{
+  flex:1;
+  overflow-y:auto;
+}
+.msg{
+  margin:4px 0;
+  padding:8px;
+  border-radius:10px;
+  background:linear-gradient(135deg,#2a2a2a,#1f1f1f);
+  box-shadow:0 4px 10px rgba(0,0,0,.4);
+}
+.mine{
+  background:linear-gradient(135deg,#4caf50,#2e7d32);
+}
+.send{
+  display:flex;
+  gap:6px;
+}
+input,button{
+  border:none;
+  border-radius:10px;
+  padding:10px;
+}
 input{flex:1}
-button{background:#4caf50;color:white}
+button{
+  background:var(--accent);
+  color:white;
+}
+
+/* ===== DOTS ===== */
+.dots{
+  font-size:20px;
+  color:#ccc;
+  cursor:pointer;
+}
+.dots:hover{color:white}
 </style>
 </head>
 
 <body>
-<div class="chat">
+<div class="app">
+
 <h3>💬 Ege Chat</h3>
 
 <input id="username" placeholder="Kullanıcı adın">
 
-<div class="section">
+<div class="card">
   <input id="newGroup" placeholder="➕ Grup adı">
   <button onclick="createGroup()">Grup Oluştur</button>
 </div>
 
-<div class="section" id="groups"><b>🔐 Gruplarım</b></div>
-<div class="section" id="users"><b>👤 Kişiler</b></div>
+<div class="card" id="groups"><b>🔐 Gruplarım</b></div>
+<div class="card" id="users"><b>👤 Kişiler</b></div>
 
-<div class="small" id="roomInfo">📌 Lobi</div>
+<div class="small" id="roomInfo">Sohbet seç</div>
 
 <div class="messages" id="messages"></div>
 
-<div id="replyPreview" class="small"></div>
-
 <div class="send">
-  <input id="message" placeholder="Mesaj yaz" disabled>
-  <button id="sendBtn" onclick="sendMessage()" disabled>Gönder</button>
+  <input id="msg" placeholder="Mesaj yaz" disabled>
+  <button onclick="send()">Gönder</button>
 </div>
+
 </div>
 
 <script>
-/* FIREBASE */
-const firebaseConfig = {
+/* ===== FIREBASE ===== */
+firebase.initializeApp({
   apiKey: "AIzaSyCDJ3x--j0YFqOZxz1Wj-o5_QLn9KgJlnk",
   authDomain: "chat-lobby-fa938.firebaseapp.com",
   databaseURL: "https://chat-lobby-fa938-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "chat-lobby-fa938"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+});
+const db=firebase.database();
 
-/* ELEMENTLER */
-const userInput = document.getElementById("username");
-const groupsDiv = document.getElementById("groups");
-const usersDiv = document.getElementById("users");
-const messages = document.getElementById("messages");
-const msgInput = document.getElementById("message");
-const sendBtn = document.getElementById("sendBtn");
-const roomInfo = document.getElementById("roomInfo");
-const newGroupInput = document.getElementById("newGroup");
-const replyPreview = document.getElementById("replyPreview");
+/* ===== STATE ===== */
+let username=localStorage.getItem("ege_user")||"";
+let chatPath=null;
+let msgRef=null;
 
-/* DURUM */
-let username = localStorage.getItem("egechat_user") || "";
-let currentChat = null;
-let currentGroup = null;
-let replyTo = null;
-let msgRef = null;
+/* ===== ELEMENTS ===== */
+const uInput=document.getElementById("username");
+const groupsDiv=document.getElementById("groups");
+const usersDiv=document.getElementById("users");
+const messages=document.getElementById("messages");
+const msgInput=document.getElementById("msg");
+const roomInfo=document.getElementById("roomInfo");
 
-/* ZAMAN */
-function timeAgo(t){
+/* ===== TIME ===== */
+function ago(t){
   if(!t) return "bilinmiyor";
-  const d = Math.floor((Date.now()-t)/1000);
+  const d=Math.floor((Date.now()-t)/1000);
   if(d<60) return "az önce";
   if(d<3600) return Math.floor(d/60)+" dk önce";
-  if(d<86400) return Math.floor(d/3600)+" saat önce";
-  return new Date(t).toLocaleString("tr-TR");
+  return Math.floor(d/3600)+" sa önce";
 }
 
-/* ONLINE DURUM */
-function setOnlineStatus(){
-  const ref = db.ref("status/"+username);
-  ref.set({online:true,lastSeen:Date.now()});
-  ref.onDisconnect().set({online:false,lastSeen:Date.now()});
+/* ===== ONLINE ===== */
+function setOnline(){
+  const r=db.ref("status/"+username);
+  r.set({online:true,last:Date.now()});
+  r.onDisconnect().set({online:false,last:Date.now()});
 }
 
-/* GİRİŞ */
+/* ===== LOGIN ===== */
 if(username){
-  userInput.value=username;
-  userInput.style.display="none";
+  uInput.value=username;
+  uInput.style.display="none";
   db.ref("users/"+username).set(true);
-  setOnlineStatus();
+  setOnline();
 }
-
-userInput.onchange=()=>{
-  username=userInput.value.trim();
+uInput.onchange=()=>{
+  username=uInput.value.trim();
   if(!username) return;
-  localStorage.setItem("egechat_user",username);
-  userInput.style.display="none";
+  localStorage.setItem("ege_user",username);
+  uInput.style.display="none";
   db.ref("users/"+username).set(true);
-  setOnlineStatus();
+  setOnline();
 };
 
-/* GRUP OLUŞTUR */
+/* ===== CREATE GROUP ===== */
 function createGroup(){
-  const g=newGroupInput.value.trim();
+  const g=document.getElementById("newGroup").value.trim();
   if(!g) return;
   db.ref("groups/"+g).set({
     owner:username,
     members:{[username]:true}
   });
-  newGroupInput.value="";
+  document.getElementById("newGroup").value="";
 }
 
-/* GRUP LİSTESİ */
+/* ===== GROUP LIST ===== */
 db.ref("groups").on("value",snap=>{
-  let html="<b>🔐 Gruplarım</b>";
+  let h="<b>🔐 Gruplarım</b>";
   snap.forEach(g=>{
     if(g.val().members && g.val().members[username]){
-      html+=`
-      <div class="item group-item">
+      h+=`
+      <div class="item row">
         <span onclick="openGroup('${g.key}')">🔒 ${g.key}</span>
-        <span class="dots" onclick="event.stopPropagation();showGroupInfo('${g.key}')">⋮</span>
+        <span class="dots" onclick="groupMenu('${g.key}')">⋮</span>
       </div>`;
     }
   });
-  groupsDiv.innerHTML=html;
+  groupsDiv.innerHTML=h;
 });
 
-/* ⋮ GRUP BİLGİ */
-function showGroupInfo(g){
-  db.ref("groups/"+g).once("value",s=>{
-    const d=s.val();
+/* ===== GROUP MENU (ADMIN) ===== */
+function groupMenu(group){
+  db.ref("groups/"+group).once("value",snap=>{
+    const d=snap.val();
     if(!d) return;
-    const m=Object.keys(d.members||{});
-    let txt=`👥 Üye Sayısı: ${m.length}\n\n`;
-    m.forEach(u=>{
-      txt+=u===d.owner?`• ${u} (admin)\n`:`• ${u}\n`;
+
+    const members=Object.keys(d.members||{});
+    const isAdmin=d.owner===username;
+
+    let text=`${group}\n👥 ${members.length} kişi\n\n`;
+    members.forEach(m=>{
+      text+=m+(m===d.owner?" (admin)":"")+"\n";
     });
-    alert("🔐 "+g+"\n\n"+txt);
+
+    if(!isAdmin){ alert(text); return; }
+
+    const action=prompt(
+      text+
+      "\nADMIN:\n"+
+      "ekle = üye ekle\n"+
+      "sil = üye çıkar"
+    );
+
+    if(action==="ekle"){
+      const u=prompt("Eklenecek kullanıcı adı:");
+      if(u) db.ref("groups/"+group+"/members/"+u).set(true);
+    }
+
+    if(action==="sil"){
+      const u=prompt("Çıkarılacak kullanıcı adı:");
+      if(u && u!==username)
+        db.ref("groups/"+group+"/members/"+u).remove();
+    }
   });
 }
 
-/* GRUP AÇ */
+/* ===== OPEN GROUP ===== */
 function openGroup(g){
-  currentGroup=g;
-  currentChat="group_"+g;
-  messages.innerHTML="";
-  msgInput.disabled=false;
-  sendBtn.disabled=false;
   roomInfo.innerText="🔐 "+g;
-  loadMessages();
+  chatPath="groupMessages/"+g;
+  load();
 }
 
-/* KİŞİLER + ONLINE */
+/* ===== USERS ===== */
 db.ref("users").on("value",snap=>{
-  let html="<b>👤 Kişiler</b>";
+  let h="<b>👤 Kişiler</b>";
   snap.forEach(u=>{
     if(u.key!==username){
       db.ref("status/"+u.key).once("value",st=>{
         const s=st.val();
-        let info=`<span class="offline">🕓 bilinmiyor</span>`;
-        if(s){
-          info=s.online
-            ? `<span class="online">🟢 online</span>`
-            : `<span class="offline">🕓 ${timeAgo(s.lastSeen)}</span>`;
-        }
-        html+=`
-        <div class="item" onclick="openPrivate('${u.key}')">
+        const info=s&&s.online
+          ? `<span class="online">🟢 online</span>`
+          : `<span class="offline">🕓 ${ago(s?.last)}</span>`;
+        h+=`
+        <div class="item" onclick="openDM('${u.key}')">
           🔒 ${u.key}<br>${info}
         </div>`;
-        usersDiv.innerHTML=html;
+        usersDiv.innerHTML=h;
       });
     }
   });
 });
 
-/* DM */
-function openPrivate(u){
-  currentChat=["dm",username,u].sort().join("|");
-  currentGroup=null;
-  messages.innerHTML="";
-  msgInput.disabled=false;
-  sendBtn.disabled=false;
+/* ===== DM ===== */
+function openDM(u){
+  const id=["dm",username,u].sort().join("_");
   roomInfo.innerText="🔒 "+u;
-  loadMessages();
+  chatPath="privateMessages/"+id;
+  load();
 }
 
-/* MESAJLAR */
-function loadMessages(){
+/* ===== LOAD MSG ===== */
+function load(){
+  messages.innerHTML="";
+  msgInput.disabled=false;
   if(msgRef) msgRef.off();
-  let path=currentGroup
-    ? "groupMessages/"+currentGroup
-    : "privateMessages/"+currentChat;
-
-  msgRef=db.ref(path);
+  msgRef=db.ref(chatPath);
   msgRef.limitToLast(50).on("child_added",s=>{
     const d=s.val();
     const div=document.createElement("div");
-    div.className="msg";
-    div.oncontextmenu=e=>{
-      e.preventDefault();
-      replyTo=d;
-      replyPreview.innerText="Yanıtlanıyor: "+d.text;
-    };
-    if(d.reply){
-      div.innerHTML=`<div class="replyBox">${d.reply.user}: ${d.reply.text}</div>`;
-    }
-    div.innerHTML+=`${d.user}: ${d.text}`;
-    if(d.user===username){
-      div.innerHTML+=`<div class="status">${d.read?"✔✔":"✔"}</div>`;
-    }
+    div.className="msg"+(d.user===username?" mine":"");
+    div.innerText=d.user+": "+d.text;
     messages.appendChild(div);
     messages.scrollTop=messages.scrollHeight;
-    if(d.user!==username){
-      db.ref(path+"/"+s.key+"/read").set(true);
-    }
   });
 }
 
-/* GÖNDER */
-function sendMessage(){
-  if(!msgInput.value.trim()) return;
-  let path=currentGroup
-    ? "groupMessages/"+currentGroup
-    : "privateMessages/"+currentChat;
-
-  db.ref(path).push({
+/* ===== SEND ===== */
+function send(){
+  if(!msgInput.value||!chatPath) return;
+  db.ref(chatPath).push({
     user:username,
     text:msgInput.value,
-    reply:replyTo?{user:replyTo.user,text:replyTo.text}:null,
-    read:false,
     time:Date.now()
   });
-  replyTo=null;
-  replyPreview.innerText="";
   msgInput.value="";
 }
 </script>
