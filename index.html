@@ -16,6 +16,10 @@
   --accent:#4caf50;
   --muted:#aaa;
 }
+*{
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
 body{
   margin:0;
   font-family:Arial;
@@ -24,14 +28,6 @@ body{
     radial-gradient(circle at top,var(--bg2),var(--bg1) 60%),
     linear-gradient(135deg,#121212,#1a1a1a);
 }
-body::before{
-  content:"";
-  position:fixed;
-  inset:0;
-  background:radial-gradient(#ffffff08 1px,transparent 1px);
-  background-size:20px 20px;
-  pointer-events:none;
-}
 .app{
   max-width:420px;
   height:100vh;
@@ -39,36 +35,42 @@ body::before{
   display:flex;
   flex-direction:column;
   padding:8px;
-  backdrop-filter:blur(12px);
 }
 .card{
   background:var(--card);
-  border-radius:10px;
+  border-radius:12px;
   padding:8px;
   margin-bottom:6px;
-  border:1px solid rgba(255,255,255,.08);
 }
 h3{text-align:center;margin:6px 0}
 .row{display:flex;justify-content:space-between;align-items:center}
-.item{padding:6px;border-radius:6px;cursor:pointer}
+.item{
+  padding:8px;
+  border-radius:8px;
+  cursor:pointer;
+}
 .item:hover{background:rgba(255,255,255,.08)}
 .small{font-size:11px;color:var(--muted)}
-.online{color:var(--accent);font-size:11px}
-.offline{color:var(--muted);font-size:11px}
-.dots{font-size:20px;color:#ccc;cursor:pointer;padding:0 6px}
-.dots:hover{color:white}
+.online{color:#4caf50;font-size:11px}
+.offline{color:#aaa;font-size:11px}
+.dots{
+  font-size:22px;
+  font-weight:bold;
+  padding:0 8px;
+  cursor:pointer;
+}
 .messages{flex:1;overflow-y:auto}
 .msg{
   margin:4px 0;
   padding:8px;
   border-radius:10px;
-  background:linear-gradient(135deg,#2a2a2a,#1f1f1f);
+  background:#2a2a2a;
 }
-.mine{background:linear-gradient(135deg,#4caf50,#2e7d32)}
+.mine{background:#4caf50}
 .send{display:flex;gap:6px}
 input,button{border:none;border-radius:10px;padding:10px}
 input{flex:1}
-button{background:var(--accent);color:white}
+button{background:#4caf50;color:white}
 </style>
 </head>
 
@@ -98,8 +100,8 @@ button{background:var(--accent);color:white}
 </div>
 
 <script>
-/* 🔐 SÜPER ADMIN */
-const SUPER_ADMIN = "ege"; // <-- KENDİ KULLANICI ADIN
+/* 🔐 SÜPER ADMIN (küçük harf!) */
+const SUPER_ADMIN = "ege";
 
 /* FIREBASE */
 firebase.initializeApp({
@@ -123,25 +125,9 @@ const messages = document.getElementById("messages");
 const msgInput = document.getElementById("msg");
 const roomInfo = document.getElementById("roomInfo");
 
-/* TIME */
-function ago(t){
-  if(!t) return "bilinmiyor";
-  const d=Math.floor((Date.now()-t)/1000);
-  if(d<60) return "az önce";
-  if(d<3600) return Math.floor(d/60)+" dk önce";
-  return Math.floor(d/3600)+" sa önce";
-}
-
-/* ONLINE */
-function setOnline(){
-  const r=db.ref("status/"+username);
-  r.set({online:true,last:Date.now()});
-  r.onDisconnect().set({online:false,last:Date.now()});
-}
-
-/* LOGIN + BAN KONTROL */
+/* LOGIN */
 function login(){
-  db.ref("banned/"+username).once("value",snap=>{
+  db.ref("banned/"+username.toLowerCase()).once("value",snap=>{
     if(snap.exists()){
       alert("⛔ Bu hesap kapatıldı");
       localStorage.removeItem("ege_user");
@@ -152,7 +138,6 @@ function login(){
     }
   });
 }
-
 if(username){
   uInput.value=username;
   uInput.style.display="none";
@@ -166,6 +151,13 @@ uInput.onchange=()=>{
   login();
 };
 
+/* ONLINE */
+function setOnline(){
+  const r=db.ref("status/"+username);
+  r.set({online:true,last:Date.now()});
+  r.onDisconnect().set({online:false,last:Date.now()});
+}
+
 /* CREATE GROUP */
 function createGroup(){
   const g=document.getElementById("newGroup").value.trim();
@@ -174,7 +166,6 @@ function createGroup(){
     owner:username,
     members:{[username]:true}
   });
-  document.getElementById("newGroup").value="";
 }
 
 /* GROUP LIST */
@@ -183,9 +174,13 @@ db.ref("groups").on("value",snap=>{
   snap.forEach(g=>{
     if(g.val().members && g.val().members[username]){
       h+=`
-      <div class="item row">
-        <span onclick="openGroup('${g.key}')">🔒 ${g.key}</span>
-        <span class="dots" onclick="groupMenu('${g.key}')">⋮</span>
+      <div class="item row"
+        ontouchstart="openGroup('${g.key}')"
+        onclick="openGroup('${g.key}')">
+        <span>🔒 ${g.key}</span>
+        <span class="dots"
+          ontouchstart="event.stopPropagation();groupMenu('${g.key}')"
+          onclick="event.stopPropagation();groupMenu('${g.key}')">⋮</span>
       </div>`;
     }
   });
@@ -196,23 +191,21 @@ db.ref("groups").on("value",snap=>{
 function groupMenu(group){
   db.ref("groups/"+group).once("value",snap=>{
     const d=snap.val();
-    if(!d) return;
-    if(d.owner!==username){ alert("Sadece admin"); return; }
-
+    if(!d || d.owner!==username) return;
     const a=prompt("ADMIN\n1=Üye ekle\n2=Üye çıkar");
     if(a==="1"){
-      const u=prompt("Eklenecek kullanıcı:");
+      const u=prompt("Kullanıcı:");
       if(u) db.ref("groups/"+group+"/members/"+u).set(true);
     }
     if(a==="2"){
-      const u=prompt("Çıkarılacak kullanıcı:");
+      const u=prompt("Kullanıcı:");
       if(u && u!==username)
         db.ref("groups/"+group+"/members/"+u).remove();
     }
   });
 }
 
-/* USERS + ⋮ BAN */
+/* USERS + ADMIN ⋮ */
 db.ref("users").on("value",snap=>{
   let h="<b>👤 Kişiler</b>";
   snap.forEach(u=>{
@@ -221,14 +214,18 @@ db.ref("users").on("value",snap=>{
         const s=st.val();
         const info=s&&s.online
           ? `<span class="online">🟢 online</span>`
-          : `<span class="offline">🕓 ${ago(s?.last)}</span>`;
+          : `<span class="offline">🕓 bilinmiyor</span>`;
         h+=`
         <div class="item row">
-          <span onclick="openDM('${u.key}')">
+          <span
+            ontouchstart="openDM('${u.key}')"
+            onclick="openDM('${u.key}')">
             🔒 ${u.key}<br>${info}
           </span>
-          ${username===SUPER_ADMIN
-            ? `<span class="dots" onclick="userMenu('${u.key}')">⋮</span>`
+          ${username.toLowerCase()===SUPER_ADMIN
+            ? `<span class="dots"
+                ontouchstart="userMenu('${u.key}')"
+                onclick="userMenu('${u.key}')">⋮</span>`
             : ``}
         </div>`;
         usersDiv.innerHTML=h;
@@ -239,16 +236,10 @@ db.ref("users").on("value",snap=>{
 
 /* USER MENU (BAN) */
 function userMenu(target){
-  if(username!==SUPER_ADMIN) return;
+  if(username.toLowerCase()!==SUPER_ADMIN) return;
+  if(!confirm(target+" hesabı kapatılsın mı?")) return;
 
-  const ok = confirm(
-    "👤 "+target+"\n\n"+
-    "Bu kişinin hesabını kapatmak istiyor musun?"
-  );
-  if(!ok) return;
-
-  // BAN
-  db.ref("banned/"+target).set(true);
+  db.ref("banned/"+target.toLowerCase()).set(true);
   db.ref("users/"+target).remove();
   db.ref("status/"+target).remove();
 
@@ -259,11 +250,9 @@ function userMenu(target){
       }
     });
   });
-
-  alert(target+" banlandı");
 }
 
-/* DM */
+/* OPEN DM */
 function openDM(u){
   const id=["dm",username,u].sort().join("_");
   roomInfo.innerText="🔒 "+u;
@@ -271,7 +260,7 @@ function openDM(u){
   load();
 }
 
-/* GROUP CHAT */
+/* OPEN GROUP */
 function openGroup(g){
   roomInfo.innerText="🔐 "+g;
   chatPath="groupMessages/"+g;
