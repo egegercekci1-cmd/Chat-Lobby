@@ -1,209 +1,232 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Ege Chat</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-:root{
-  --bg:#0b1020;
-  --card:#1e1e1e;
-  --text:#fff;
-  --accent:#4caf50;
-}
-body.light{
-  --bg:#f2f2f2;
-  --card:#ffffff;
-  --text:#000;
-}
-*{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 body{
   margin:0;
-  background:var(--bg);
-  color:var(--text);
-  font-family:Arial;
+  font-family:-apple-system,BlinkMacSystemFont;
+  background:#0f172a;
+  color:white;
+  touch-action: manipulation;
 }
-.app{
-  max-width:420px;
-  height:100vh;
-  margin:auto;
+header{
+  padding:12px;
+  background:#020617;
   display:flex;
-  flex-direction:column;
-  padding:8px;
+  justify-content:space-between;
+  align-items:center;
 }
-.card{
-  background:var(--card);
-  border-radius:12px;
-  padding:8px;
-  margin-bottom:6px;
+button{
+  padding:8px 12px;
+  border:none;
+  border-radius:8px;
 }
-.row{display:flex;justify-content:space-between;align-items:center}
-.item{padding:8px;border-radius:8px;cursor:pointer}
-.item:hover{background:rgba(255,255,255,.1)}
-.messages{flex:1;overflow-y:auto}
+#chat{
+  height:calc(100vh - 120px);
+  overflow-y:auto;
+  padding:10px;
+}
 .msg{
-  background:#2a2a2a;
-  margin:4px 0;
+  background:#1e293b;
+  margin-bottom:8px;
   padding:8px;
-  border-radius:10px;
-  position:relative;
+  border-radius:8px;
 }
-.mine{background:var(--accent)}
-.meta{font-size:10px;opacity:.7;margin-top:4px;text-align:right}
-.pinned{
-  background:#333;
-  border-left:4px solid gold;
+input{
+  width:70%;
+  padding:10px;
+  border-radius:8px;
+  border:none;
 }
-.send{display:flex;gap:6px}
-input,button{border:none;border-radius:10px;padding:10px}
-button{background:var(--accent);color:white}
-.topbar{display:flex;justify-content:space-between;align-items:center}
+#send{
+  width:25%;
+}
+.hidden{display:none}
+
+/* Admin Panel */
+#adminPanel{
+  position:fixed;
+  bottom:0;
+  left:0;
+  right:0;
+  height:80%;
+  background:#020617;
+  border-radius:16px 16px 0 0;
+  padding:12px;
+}
+.userRow{
+  padding:10px;
+  border-bottom:1px solid #334155;
+  display:flex;
+  justify-content:space-between;
+}
+.menu{
+  background:#020617;
+  border:1px solid #334155;
+  position:absolute;
+  z-index:99;
+}
+.menu button{
+  display:block;
+  width:100%;
+}
 </style>
 </head>
 
 <body>
-<div class="app">
 
-<div class="topbar">
+<header>
   <b>💬 Ege Chat</b>
-  <select id="themeSel">
-    <option value="auto">🌓</option>
-    <option value="dark">🌙</option>
-    <option value="light">☀️</option>
-  </select>
+  <button id="adminBtn" class="hidden">⚙️</button>
+</header>
+
+<div id="chat"></div>
+
+<div style="display:flex;padding:10px;">
+  <input id="msg" placeholder="Mesaj yaz">
+  <button id="send">Gönder</button>
 </div>
 
-<input id="username" placeholder="Kullanıcı adın">
-
-<div class="card" id="rooms"></div>
-
-<div class="card pinned" id="pinned" style="display:none"></div>
-
-<div class="messages" id="messages"></div>
-
-<div class="send">
-  <input id="msg" placeholder="Mesaj yaz" disabled>
-  <button onclick="send()">Gönder</button>
+<!-- ADMIN PANEL -->
+<div id="adminPanel" class="hidden">
+  <h3>👑 Admin Paneli</h3>
+  <div id="userList"></div>
+  <button onclick="closeAdmin()">Kapat</button>
 </div>
 
-</div>
+<!-- FIREBASE -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, push, onValue, set, remove, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-<script>
-/* FIREBASE */
-firebase.initializeApp({
-  apiKey:"AIzaSyCDJ3x--j0YFqOZxz1Wj-o5_QLn9KgJlnk",
-  databaseURL:"https://chat-lobby-fa938-default-rtdb.europe-west1.firebasedatabase.app"
-});
-const db=firebase.database();
-
-/* THEME */
-const themeSel=document.getElementById("themeSel");
-const savedTheme=localStorage.getItem("theme")||"auto";
-themeSel.value=savedTheme;
-applyTheme(savedTheme);
-themeSel.onchange=()=>{localStorage.setItem("theme",themeSel.value);applyTheme(themeSel.value)};
-function applyTheme(t){
-  document.body.className="";
-  if(t==="light") document.body.classList.add("light");
-  if(t==="auto" && matchMedia("(prefers-color-scheme: light)").matches)
-    document.body.classList.add("light");
-}
-
-/* STATE */
-let username=localStorage.getItem("ege_user")||"";
-let chatPath=null, msgRef=null;
-
-/* LOGIN */
-const u=document.getElementById("username");
-if(username){u.value=username;u.style.display="none";}
-u.onchange=()=>{
-  username=u.value.trim();
-  localStorage.setItem("ege_user",username);
-  u.style.display="none";
+const firebaseConfig = {
+  apiKey: "AIzaSyCDJ3x--j0YFqOZxz1Wj-o5_QLn9KgJlnk",
+  authDomain: "chat-lobby-fa938.firebaseapp.com",
+  databaseURL: "https://chat-lobby-fa938-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "chat-lobby-fa938",
+  storageBucket: "chat-lobby-fa938.appspot.com",
+  messagingSenderId: "436067349066",
+  appId: "1:436067349066:web:65f19c754697b6f84d6cb3"
 };
 
-/* ROOMS (basit DM listesi) */
-db.ref("users").on("value",snap=>{
-  let h="";
-  snap.forEach(s=>{
-    if(s.key!==username){
-      h+=`<div class="item"
-        ontouchstart="openDM('${s.key}')"
-        onclick="openDM('${s.key}')">🔒 ${s.key}</div>`;
-    }
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
+
+const ADMIN_UID = "SENIN_UID_BURAYA"; // giriş yaptıktan sonra console'dan yaz
+const ADMIN_PASS = "kanarya123";
+
+let uid = null;
+let username = localStorage.getItem("username");
+
+if(!username){
+  username = prompt("Kullanıcı adın:");
+  localStorage.setItem("username",username);
+}
+
+signInAnonymously(auth);
+
+onAuthStateChanged(auth,(user)=>{
+  if(!user) return;
+  uid = user.uid;
+
+  set(ref(db,"users/"+uid),{
+    name:username,
+    online:true,
+    lastSeen:Date.now()
   });
-  document.getElementById("rooms").innerHTML=h;
+
+  if(uid===ADMIN_UID){
+    document.getElementById("adminBtn").classList.remove("hidden");
+  }
 });
 
-/* OPEN DM */
-function openDM(u){
-  chatPath=["dm",username,u].sort().join("_");
-  load();
-}
+window.addEventListener("beforeunload",()=>{
+  if(uid) update(ref(db,"users/"+uid),{online:false,lastSeen:Date.now()});
+});
 
-/* LOAD */
-function load(){
-  document.getElementById("messages").innerHTML="";
-  document.getElementById("msg").disabled=false;
-
-  if(msgRef) msgRef.off();
-  msgRef=db.ref("chats/"+chatPath);
-
-  msgRef.limitToLast(50).on("child_added",s=>{
-    const d=s.val();
-    if(!d.seenBy) d.seenBy={};
-    d.seenBy[username]=true;
-    db.ref("chats/"+chatPath+"/"+s.key+"/seenBy/"+username).set(true);
-
-    renderMsg(s.key,d);
-  });
-
-  db.ref("pinned/"+chatPath).on("value",s=>{
-    const p=document.getElementById("pinned");
-    if(s.exists()){
-      p.style.display="block";
-      p.innerText="📌 "+s.val().text;
-    }else p.style.display="none";
-  });
-}
-
-/* RENDER */
-function renderMsg(id,d){
-  const div=document.createElement("div");
-  div.className="msg"+(d.user===username?" mine":"");
-  div.innerHTML=`
-    <b>${d.user}</b><br>${d.text}
-    <div class="meta">
-      ${Object.keys(d.seenBy||{}).length>1?"✓✓":"✓"}
-      <span onclick="pin('${id}','${d.text}')">📌</span>
-    </div>`;
-  messages.appendChild(div);
-  messages.scrollTop=messages.scrollHeight;
-}
-
-/* SEND */
-function send(){
-  const t=msg.value.trim();
-  if(!t||!chatPath) return;
-  db.ref("chats/"+chatPath).push({
+document.getElementById("send").onclick=()=>{
+  const text=msg.value.trim();
+  if(!text) return;
+  push(ref(db,"messages"),{
     user:username,
-    text:t,
-    time:Date.now(),
-    seenBy:{[username]:true}
+    uid,
+    text,
+    time:Date.now()
   });
   msg.value="";
+};
+
+onValue(ref(db,"messages"),snap=>{
+  chat.innerHTML="";
+  snap.forEach(s=>{
+    const m=s.val();
+    const div=document.createElement("div");
+    div.className="msg";
+    div.textContent=m.user+": "+m.text;
+    chat.appendChild(div);
+  });
+  chat.scrollTop=chat.scrollHeight;
+});
+
+/* ADMIN */
+adminBtn.onclick=()=>{
+  const pass=prompt("Admin şifresi:");
+  if(pass!==ADMIN_PASS) return alert("Yanlış şifre");
+  adminPanel.classList.remove("hidden");
+  loadUsers();
+};
+
+function closeAdmin(){
+  adminPanel.classList.add("hidden");
 }
 
-/* PIN */
-function pin(id,text){
-  if(confirm("Mesaj sabitlensin mi?")){
-    db.ref("pinned/"+chatPath).set({id,text});
-  }
+function loadUsers(){
+  onValue(ref(db,"users"),snap=>{
+    userList.innerHTML="";
+    snap.forEach(s=>{
+      const u=s.val();
+      const id=s.key;
+      const row=document.createElement("div");
+      row.className="userRow";
+      row.innerHTML=`${u.name} ${u.online?"🟢":"⚪"} <button>⋮</button>`;
+      row.querySelector("button").onclick=(e)=>openMenu(e,id);
+      userList.appendChild(row);
+    });
+  });
 }
+
+function openMenu(e,id){
+  document.querySelectorAll(".menu").forEach(m=>m.remove());
+  const m=document.createElement("div");
+  m.className="menu";
+  m.style.top=e.clientY+"px";
+  m.style.left=e.clientX+"px";
+  m.innerHTML=`
+    <button onclick="ban('${id}',600000)">10 dk ban</button>
+    <button onclick="ban('${id}',3600000)">1 saat ban</button>
+    <button onclick="removeUser('${id}')">Hesabı sil</button>
+  `;
+  document.body.appendChild(m);
+}
+
+window.ban=(id,time)=>{
+  update(ref(db,"users/"+id),{
+    bannedUntil:Date.now()+time
+  });
+  alert("Banlandı");
+};
+
+window.removeUser=(id)=>{
+  if(confirm("Silinsin mi?")){
+    remove(ref(db,"users/"+id));
+  }
+};
 </script>
 </body>
 </html>
